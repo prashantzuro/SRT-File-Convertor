@@ -1,104 +1,46 @@
-export const translateSrt = async (
-  fileContent: string,
-  apiKey: string,
-  language: string
-): Promise<string | null> => {
-  const maxRetries = 10; // Increased max retries
-  let retryDelay = 2000; // Initial delay is 2 seconds
-  let retryCount = 0;
+import { Language } from '../types';
 
-  // Keep trying until the max retry limit is reached
-  while (retryCount < maxRetries) {
-    try {
-      console.log("Sending translation request...");
+const TRANSLATION_PROXY_URL = 'http://localhost:5000/proxy/anthropic'; // Backend proxy endpoint
 
-      // Send the translation request
-      let response = await fetch("https://api.openai.com/v1/chat/completions", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${apiKey}`,
-        },
-        body: JSON.stringify({
-          model: "gpt-3.5-turbo",
-          messages: [
-            {
-              role: "system",
-              content: `You are an SRT translator. Translate the following subtitles to ${language}:`,
-            },
-            { role: "user", content: fileContent },
-          ],
-        }),
-      });
+const translateWithClaude = async (
+  content: string,
+  targetLanguage: string,
+  apiKey: string
+): Promise<string> => {
+  const prompt = `Translate the following SRT subtitle content to ${targetLanguage}. Maintain the same SRT format, including timestamps and subtitle numbers. Only translate the text content:
 
-      // Check for 429 Rate Limit Exceeded response
-      while (response.status === 429) {
-        const retryAfter = response.headers.get("Retry-After");
-        let waitTime = retryAfter ? parseInt(retryAfter, 10) * 1000 : retryDelay;
-        
-        // Log and apply wait time from Retry-After or fallback delay
-        console.warn(`Rate limit exceeded. Retrying in ${waitTime / 1000} seconds...`);
+${content}`;
 
-        await new Promise(resolve => setTimeout(resolve, waitTime)); // Wait before retrying
-        retryDelay *= 2; // Exponential backoff: double the delay for the next retry
-        retryCount++;
+  const response = await fetch(TRANSLATION_PROXY_URL, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ apiKey, prompt }),
+  });
 
-        // Retry the request after the delay
-        response = await fetch("https://api.openai.com/v1/chat/completions", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${apiKey}`,
-          },
-          body: JSON.stringify({
-            model: "gpt-3.5-turbo",
-            messages: [
-              {
-                role: "system",
-                content: `You are an SRT translator. Translate the following subtitles to ${language}:`,
-              },
-              { role: "user", content: fileContent },
-            ],
-          }),
-        });
-
-        // If retry count exceeds max retries, throw an error
-        if (retryCount >= maxRetries) {
-          console.error("Max retries exceeded for rate limit.");
-          throw new Error("Rate limit exceeded.");
-        }
-      }
-
-      // Handle response if status is not 429
-      if (!response.ok) {
-        console.error("API Request Failed:", response.statusText);
-        throw new Error(`API Request failed with status ${response.status}`);
-      }
-
-      // Parse the API response
-      const data = await response.json();
-      console.log("Full API Response:", data);
-
-      const translatedText = data?.choices?.[0]?.message?.content || null;
-
-      // Display the translated text to verify the response
-      if (translatedText) {
-        console.log("Translation Success:", translatedText);
-        return translatedText;
-      } else {
-        console.error("No translation found in the response.");
-        throw new Error("No translation found in the response.");
-      }
-
-    } catch (error) {
-      console.error("Translation Error:", error);
-
-      // If max retries are reached, throw an error
-      if (retryCount === maxRetries - 1) {
-        throw new Error("Max retries reached. Translation failed.");
-      }
-    }
+  if (!response.ok) {
+    throw new Error('Translation API request failed');
   }
 
-  return null; // If all retries fail
+  const data = await response.json();
+  return data.completion; // Adjust this to match the backend API response structure
+};
+
+export const translateSrt = async (
+  content: string,
+  apiKey: string,
+  targetLanguage: Language,
+  onProgress: (progress: number) => void
+): Promise<string> => {
+  try {
+    onProgress(50); // Set progress to 50% when starting translation
+
+    const translatedContent = await translateWithClaude(content, targetLanguage, apiKey);
+
+    onProgress(100); // Set progress to 100% when done
+    
+    return translatedContent;
+  } catch (error) {
+    console.error('Translation error:', error);
+    throw new Error('Translation failed: ' + (error as Error).message);
+  }
 };

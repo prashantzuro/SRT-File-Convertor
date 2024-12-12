@@ -1,5 +1,6 @@
 import React, { useState } from "react";
 import { Button, Typography } from "@mui/material";
+import Anthropic from '@anthropic-ai/sdk';
 
 interface Props {
   apiKey: string;
@@ -10,24 +11,42 @@ const ApiKeyValidator: React.FC<Props> = ({ apiKey }) => {
 
   const validateApiKey = async () => {
     try {
-      const response = await fetch("https://api.openai.com/v1/models", {
-        headers: {
-          Authorization: `Bearer ${apiKey}`,
-        },
+      const anthropic = new Anthropic({
+        apiKey: apiKey,
       });
 
-      setValid(response.ok ? "Valid" : "Invalid");
-    } catch {
+      const message = await anthropic.messages.create({
+        model: "claude-3-sonnet-20240229",
+        max_tokens: 1,
+        messages: [{
+          role: 'user',
+          content: 'Hello'
+        }]
+      });
+
+      setValid("Valid");
+    } catch (error) {
       setValid("Invalid");
     }
   };
 
   return (
     <div>
-      <Button variant="contained" onClick={validateApiKey}>
+      <Button 
+        variant="contained" 
+        onClick={validateApiKey}
+        disabled={!apiKey}
+      >
         Check API Key
       </Button>
-      {valid && <Typography>{valid} API Key</Typography>}
+      {valid && (
+        <Typography 
+          color={valid === "Valid" ? "success.main" : "error.main"}
+          sx={{ mt: 1 }}
+        >
+          {valid} API Key
+        </Typography>
+      )}
     </div>
   );
 };
