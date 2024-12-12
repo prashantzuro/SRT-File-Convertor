@@ -18,7 +18,7 @@ app.add_middleware(
 # Initialize Anthropic client
 # Make sure to set your API key as an environment variable
 client = anthropic.Anthropic(
-    api_key='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'
+    api_key=''
 )
 
 
